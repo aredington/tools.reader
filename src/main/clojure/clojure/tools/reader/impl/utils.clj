@@ -83,31 +83,34 @@
     (with-meta obj (merge m orig-meta))))
 
 (def ^:private ^:dynamic *source-log-frames*
-  '())
+  {})
 
 (defn- peek-source-log
   "Returns a string containing the contents of the top most source
   logging frame."
   []
-  (apply str (reverse @(first *source-log-frames*))))
+  (apply str (subvec @(:buffer *source-log-frames*) (:offset *source-log-frames*))))
 
 (defn log-source-char
   "Logs `char` to all currently active source logging frames."
   [char]
-  (doseq [var *source-log-frames*]
-    (var-set var (conj @var char))))
+  (when-let [buffer (:buffer *source-log-frames*)]
+    (swap! buffer conj char)))
 
 (defn drop-last-logged-char
   "Removes the last logged character from all currently active source
   logging frames. Called when pushing a character back."
   []
-  (doseq [var *source-log-frames*]
-    (var-set var (pop @var))))
+  (when-let [buffer (:buffer *source-log-frames*)]
+    (swap! buffer pop)))
 
 (defn log-source-call
   [f]
-  (with-local-vars [new-frame '()]
-    (binding [*source-log-frames* (conj *source-log-frames* new-frame)]
+  (let [new-frame (if (thread-bound? #'*source-log-frames*)
+                    (assoc *source-log-frames* :offset (count @(:buffer *source-log-frames*)))
+                    {:buffer (atom [])
+                     :offset 0})]
+    (binding [*source-log-frames* new-frame]
       (let [ret (f)]
         (if (instance? clojure.lang.IMeta ret)
           (merge-meta ret {:source (peek-source-log)})
