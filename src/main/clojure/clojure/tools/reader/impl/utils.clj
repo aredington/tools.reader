@@ -74,3 +74,50 @@
     (symbol? f)  {:tag f}
     (string? f)  {:tag f}
     :else        f))
+
+(defn merge-meta
+  "Returns an object of the same type and value as `obj`, with its
+  metadata merged over `m`."
+  [obj m]
+  (let [orig-meta (meta obj)]
+    (with-meta obj (merge m orig-meta))))
+
+(def ^:private ^:dynamic *source-log-frames*
+  '())
+
+(defn- peek-source-log
+  "Returns a string containing the contents of the top most source
+  logging frame."
+  []
+  (apply str (reverse @(first *source-log-frames*))))
+
+(defn log-source-char
+  "Logs `char` to all currently active source logging frames."
+  [char]
+  (doseq [var *source-log-frames*]
+    (var-set var (conj @var char))))
+
+(defn drop-last-logged-char
+  "Removes the last logged character from all currently active source
+  logging frames. Called when pushing a character back."
+  []
+  (doseq [var *source-log-frames*]
+    (var-set var (pop @var))))
+
+(defn log-source-call
+  [f]
+  (with-local-vars [new-frame '()]
+    (binding [*source-log-frames* (conj *source-log-frames* new-frame)]
+      (let [ret (f)]
+        (if (instance? clojure.lang.IMeta ret)
+          (merge-meta ret {:source (peek-source-log)})
+          ret)))))
+
+(defmacro log-source
+  "Executes `body` after pushing a new frame to the source logging
+  stack. If `body` returns a value that extends IMeta, retrieves the
+  source logged during body's execution, and attaches it to the
+  value's meta under the :source key. Tears down the source logging
+  stack frame under all circumstances."
+  [& body]
+  `(log-source-call (fn [] ~@body)))

@@ -50,6 +50,7 @@
     (when (> s-len s-pos)
       (let [r (nth s s-pos)]
         (update! s-pos inc)
+        (log-source-char r)
         r)))
   (peek-char [reader]
     (when (> s-len s-pos)
@@ -58,13 +59,15 @@
 (deftype InputStreamReader [^InputStream is ^:unsynchronized-mutable ^"[B" buf]
   Reader
   (read-char [reader]
-    (if buf
-      (let [c (aget buf 0)]
-        (set! buf nil)
-        (char c))
-      (let [c (.read is)]
-        (when (>= c 0)
-          (char c)))))
+    (let [cc (if buf
+               (let [c (aget buf 0)]
+                 (set! buf nil)
+                 (char c))
+               (let [c (.read is)]
+                 (when (>= c 0)
+                   (char c))))]
+      (log-source-char cc)
+      cc))
   (peek-char [reader]
     (when-not buf
       (set! buf (byte-array 1))
@@ -77,12 +80,11 @@
     [rdr ^"[Ljava.lang.Object;" buf buf-len ^:unsynchronized-mutable buf-pos]
   Reader
   (read-char [reader]
-    (char
-     (if (< buf-pos buf-len)
-       (let [r (aget buf buf-pos)]
-         (update! buf-pos inc)
-         r)
-       (read-char rdr))))
+    (char (if (< buf-pos buf-len)
+            (let [r (aget buf buf-pos)]
+              (update! buf-pos inc)
+              r)
+            (read-char rdr))))
   (peek-char [reader]
     (char
      (if (< buf-pos buf-len)
@@ -92,6 +94,7 @@
   (unread [reader ch]
     (when ch
       (if (zero? buf-pos) (throw (RuntimeException. "Pushback buffer is full")))
+      (drop-last-logged-char)
       (update! buf-pos dec)
       (aset buf buf-pos ch))))
 
@@ -138,7 +141,9 @@
   (read-char [rdr]
     (let [c (.read ^java.io.PushbackReader rdr)]
       (when (>= c 0)
-        (normalize-newline rdr (char c)))))
+        (let [cc (normalize-newline rdr (char c))]
+          (log-source-char cc)
+          cc))))
 
   (peek-char [rdr]
     (when-let [c (read-char rdr)]
@@ -148,6 +153,7 @@
   IPushbackReader
   (unread [rdr c]
     (when c
+      (drop-last-logged-char)
       (.unread ^java.io.PushbackReader rdr (int c)))))
 
 (extend LineNumberingPushbackReader

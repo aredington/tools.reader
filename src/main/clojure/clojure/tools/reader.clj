@@ -164,38 +164,53 @@
 
 (defn- read-list
   [rdr _]
-  (let [[line column] (when (indexing-reader? rdr)
-                        [(get-line-number rdr) (int (dec (get-column-number rdr)))])
-        the-list (read-delimited \) rdr true)]
+  (let [[start-line start-column] (when (indexing-reader? rdr)
+                                    [(get-line-number rdr) (int (dec (get-column-number rdr)))])
+        the-list (read-delimited \) rdr true)
+        [end-line end-column] (when (indexing-reader? rdr)
+                                [(get-line-number rdr) (int (get-column-number rdr))])]
     (if (empty? the-list)
       '()
       (with-meta (clojure.lang.PersistentList/create the-list)
-        (when line
-          {:line line :column column})))))
+        (when start-line
+          {:line start-line
+           :column start-column
+           :end-line end-line
+           :end-column end-column})))))
 
 (defn- read-vector
   [rdr _]
-  (let [[line column] (when (indexing-reader? rdr)
+  (let [[start-line start-column] (when (indexing-reader? rdr)
                         [(get-line-number rdr) (int (dec (get-column-number rdr)))])
-        the-vector (read-delimited \] rdr true)]
+        the-vector (read-delimited \] rdr true)
+        [end-line end-column] (when (indexing-reader? rdr)
+                                [(get-line-number rdr) (int (get-column-number rdr))])]
     (with-meta the-vector
-      (when line
-        {:line line :column column}))))
+      (when start-line
+        {:line start-line
+         :column start-column
+         :end-line end-line
+         :end-column end-column}))))
 
 (defn- read-map
   [rdr _]
-  (let [[line column] (when (indexing-reader? rdr)
-                        [(get-line-number rdr) (int (dec (get-column-number rdr)))])
+  (let [[start-line start-column] (when (indexing-reader? rdr)
+                                    [(get-line-number rdr) (int (dec (get-column-number rdr)))])
         the-map (read-delimited \} rdr true)
-        map-count (count the-map)]
+        map-count (count the-map)
+        [end-line end-column] (when (indexing-reader? rdr)
+                                [(get-line-number rdr) (int (dec (get-column-number rdr)))])]
     (when (odd? map-count)
       (reader-error rdr "Map literal must contain an even number of forms"))
     (with-meta
       (if (zero? map-count)
         {}
         (RT/map (to-array the-map)))
-      (when line
-        {:line line :column column}))))
+      (when start-line
+        {:line start-line
+         :column start-column
+         :end-line end-line
+         :end-column end-column}))))
 
 (defn- read-number
   [reader initch]
@@ -263,7 +278,9 @@
         (or (when-let [p (parse-symbol token)]
               (with-meta (symbol (p 0) (p 1))
                 (when line
-                  {:line line :column column})))
+                  {:line line :column column
+                   :end-line (get-line-number rdr)
+                   :end-column (int (get-column-number rdr))})))
             (reader-error rdr "Invalid token: " token))))))
 
 (defn- resolve-ns [sym]
@@ -694,19 +711,20 @@
      (when (= :unknown *read-eval*)
        (reader-error "Reading disallowed - *read-eval* bound to :unknown"))
      (try
-       (let [ch (read-char reader)]
-         (cond
-          (whitespace? ch) (read reader eof-error? sentinel recursive?)
-          (nil? ch) (if eof-error? (reader-error reader "EOF") sentinel)
-          (number-literal? reader ch) (read-number reader ch)
-          (comment-prefix? ch) (read (read-comment reader ch) eof-error? sentinel recursive?)
-          :else (let [f (macros ch)]
-                  (if f
-                    (let [res (f reader ch)]
-                      (if (identical? res reader)
-                        (read reader eof-error? sentinel recursive?)
-                        res))
-                    (read-symbol reader ch)))))
+       (log-source
+        (let [ch (read-char reader)]
+          (cond
+           (whitespace? ch) (read reader eof-error? sentinel recursive?)
+           (nil? ch) (if eof-error? (reader-error reader "EOF") sentinel)
+           (number-literal? reader ch) (read-number reader ch)
+           (comment-prefix? ch) (read (read-comment reader ch) eof-error? sentinel recursive?)
+           :else (let [f (macros ch)]
+                   (if f
+                     (let [res (f reader ch)]
+                       (if (identical? res reader)
+                         (read reader eof-error? sentinel recursive?)
+                         res))
+                     (read-symbol reader ch))))))
        (catch Exception e
          (if (ex-info? e)
            (throw e)
