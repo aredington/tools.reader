@@ -89,26 +89,26 @@
   "Returns a string containing the contents of the top most source
   logging frame."
   []
-  (apply str (subvec @(:buffer *source-log-frames*) (:offset *source-log-frames*))))
+  (.substring ^StringBuilder (:buffer *source-log-frames*) (:offset *source-log-frames*)))
 
 (defn log-source-char
   "Logs `char` to all currently active source logging frames."
   [char]
-  (when-let [buffer (:buffer *source-log-frames*)]
-    (swap! buffer conj char)))
+  (when-let [^StringBuilder buffer (:buffer *source-log-frames*)]
+    (.append buffer char)))
 
 (defn drop-last-logged-char
   "Removes the last logged character from all currently active source
   logging frames. Called when pushing a character back."
   []
-  (when-let [buffer (:buffer *source-log-frames*)]
-    (swap! buffer pop)))
+  (when-let [^StringBuilder buffer (:buffer *source-log-frames*)]
+    (.deleteCharAt buffer (dec (.length buffer)))))
 
 (defn log-source-call
   [f]
   (let [new-frame (if (thread-bound? #'*source-log-frames*)
-                    (assoc *source-log-frames* :offset (count @(:buffer *source-log-frames*)))
-                    {:buffer (atom [])
+                    (assoc *source-log-frames* :offset (.length ^StringBuilder (:buffer *source-log-frames*)))
+                    {:buffer (StringBuilder.)
                      :offset 0})]
     (binding [*source-log-frames* new-frame]
       (let [ret (f)]
