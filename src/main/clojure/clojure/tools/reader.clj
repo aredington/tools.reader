@@ -154,7 +154,8 @@
         (if (identical? delim (char ch))
           (persistent! a)
           (if-let [macrofn (macros ch)]
-            (let [mret (macrofn rdr ch)]
+            (let [mret (log-source rdr 
+                                   (macrofn rdr ch))]
               (recur (if-not (identical? mret rdr) (conj! a mret) a)))
             (let [o (read (doto rdr (unread ch)) true nil recursive?)]
               (recur (if-not (identical? o rdr) (conj! a o) a)))))
@@ -719,19 +720,20 @@
      (when (= :unknown *read-eval*)
        (reader-error "Reading disallowed - *read-eval* bound to :unknown"))
      (try
-       (let [ch (read-char reader)]
-         (cond
-          (whitespace? ch) (read reader eof-error? sentinel recursive?)
-          (nil? ch) (if eof-error? (reader-error reader "EOF") sentinel)
-          (number-literal? reader ch) (read-number reader ch)
-          (comment-prefix? ch) (read (read-comment reader ch) eof-error? sentinel recursive?)
-          :else (let [f (macros ch)]
-                  (if f
-                    (let [res (f reader ch)]
-                      (if (identical? res reader)
-                        (read reader eof-error? sentinel recursive?)
-                        res))
-                    (read-symbol reader ch)))))
+       (log-source reader
+                   (let [ch (read-char reader)]
+                     (cond
+                      (whitespace? ch) (read reader eof-error? sentinel recursive?)
+                      (nil? ch) (if eof-error? (reader-error reader "EOF") sentinel)
+                      (number-literal? reader ch) (read-number reader ch)
+                      (comment-prefix? ch) (read (read-comment reader ch) eof-error? sentinel recursive?)
+                      :else (let [f (macros ch)]
+                              (if f
+                                (let [res (f reader ch)]
+                                  (if (identical? res reader)
+                                    (read reader eof-error? sentinel recursive?)
+                                    res))
+                                (read-symbol reader ch))))))
        (catch Exception e
          (if (ex-info? e)
            (throw e)
