@@ -154,8 +154,8 @@
         (if (identical? delim (char ch))
           (persistent! a)
           (if-let [macrofn (macros ch)]
-            (let [mret (log-source rdr 
-                                   (macrofn rdr ch))]
+            (let [mret (log-source-unread rdr
+                         (macrofn rdr ch))]
               (recur (if-not (identical? mret rdr) (conj! a mret) a)))
             (let [o (read (doto rdr (unread ch)) true nil recursive?)]
               (recur (if-not (identical? o rdr) (conj! a o) a)))))
@@ -323,22 +323,23 @@
 
 (defn- read-meta
   [rdr _]
-  (let [[line column] (when (indexing-reader? rdr)
-                        [(get-line-number rdr) (int (dec (get-column-number rdr)))])
-        m (desugar-meta (read rdr true nil true))]
-    (when-not (map? m)
-      (reader-error rdr "Metadata must be Symbol, Keyword, String or Map"))
-    (let [o (read rdr true nil true)]
-      (if (instance? IMeta o)
-        (let [m (if (and line
-                         (seq? o))
-                  (assoc m :line line
+  (log-source rdr
+    (let [[line column] (when (indexing-reader? rdr)
+                          [(get-line-number rdr) (int (dec (get-column-number rdr)))])
+          m (desugar-meta (read rdr true nil true))]
+      (when-not (map? m)
+        (reader-error rdr "Metadata must be Symbol, Keyword, String or Map"))
+      (let [o (read rdr true nil true)]
+        (if (instance? IMeta o)
+          (let [m (if (and line
+                           (seq? o))
+                    (assoc m :line line
                            :column column)
-                  m)]
-          (if (instance? IObj o)
-            (with-meta o (merge (meta o) m))
-            (reset-meta! o m)))
-        (reader-error rdr "Metadata can only be applied to IMetas")))))
+                    m)]
+            (if (instance? IObj o)
+              (with-meta o (merge (meta o) m))
+              (reset-meta! o m)))
+          (reader-error rdr "Metadata can only be applied to IMetas"))))))
 
 (defn- read-set
   [rdr _]
