@@ -82,7 +82,7 @@
               (with-meta (list '^{:line 8 :column 6 :end-line 8, :end-column 7 :source "-"} -
                                (with-meta (list '^{:line 8 :column 9 :end-line 8 :end-column 14 :source "apply"} apply
                                                 '^{:line 8 :column 15 :end-line 8 :end-column 16 :source "+"} +
-                                                ^{:last 'last-five :line 9 :column 34 :end-line 9 :end-column 41 :source "[1 2 3]"}
+                                                ^{:last 'last-five :line 9 :column 34 :end-line 9 :end-column 41 :source "^{:last last-five} [1 2 3]"}
                                                 [1 2 3])
                                  {:line 8 :column 8 :end-line 9 :end-column 42 :source "(apply +
               ^{:last last-five} [1 2 3])"})
